@@ -1,39 +1,70 @@
-# aiconnect_segmentation
-
 # 국방 AI 경진대회 코드 사용법
-- MMC_Lab팀, 박성욱, 이승리, 문희찬, 임수빈
-- 닉네임 : 욱스박스
+- MMC_Lab팀, 박성욱, 문희찬, 이승리, 임수빈
+- 닉네임 : 욱스박스,무니무니찬,victory,teol
 
 
 # 핵심 파일 설명
-  - 학습 데이터 경로: `./my_dataset`
-  - Network 초기 값으로 사용한 공개된 Pretrained 파라미터: `./LaMa_models/big-lama-with-discr/models/best.ckpt`
-  - 공개 Pretrained 모델 기반으로 추가 Fine Tuning 학습을 한 파라미터 3개
-    - `./mymodel/models/last_v7.ckpt`
-    - `./mymodel/models/last_v10.ckpt`
-    - `./mymodel/models/last_v11.ckpt`
-  - 학습 실행 스크립트: `./train.sh`
-  - 학습 메인 코드: `./bin/train.py`
-  - 테스트 실행 스크립트: `./inference.sh`
-  - 테스트 메인 코드: `./bin/predict.py`
-  - 테스트 이미지, 마스크 경로: `./Inpainting_Test_Raw_Mask`
-  - 테스트 결과 이미지 경로: `./final_result/output_aipg`
+  - 학습 데이터 경로: `./data`
+  - Network 초기 값으로 사용한 공개된 Pretrained 파라미터: `architecture: DeepLabV3Plus`
+`encoder: resnext50_32x4d`
+`encoder_weight: imagenet` (대회에서 제공한 baseline 코드에서 `train.yaml` 파일의 세팅사항)
+  - 공개 되어있는 Pretrained 모델 기반으로 추가 Fine Tuning 학습을 한 파라미터 3개
+    - `./results/train/20221110_072024/model.pt`
+    - `./results/train/20221114_101319/model.pt`
+    - `./results/train/20221114_142823/model.pt`
+  - 학습 실행 스크립트: `python train.py`
+  - 학습 메인 코드: `./train.py`
+  - 테스트 실행 스크립트: `python predict.py`
+  - 테스트 메인 코드: `./predict.py`
+  - 테스트 이미지, 마스크 경로: `./data/test`
+  - 테스트 결과 이미지 경로: `./results/pred/20221110_072024/final_pred/mask`
 
 ## 코드 구조 설명
-- mmsegmentation을 backend로 사용하여 학습 및 테스트
-    - 최종 사용 모델 : mmsegmentation에서 제공하는 xxx 모델
-    - custom mIoU loss 추가
+- segmentation-models-pytorch library 사용(ensemble한 모든 모델 동일)
+    - 최종 사용 모델 :
+        - architecture: DeepLabV3Plus
+        - encoder: resnext50_32x4d
+        - encoder_weight: imagenet
+    - data augmentation 추가(train.py에 추가)
     ```
-   mmsegmentation/core/models/losses/custom_loss.py
-   mmsegmentation/core/models/losses/__init__.py
+    ./results/train/20221110_072024/model.pt 모델 학습 시 
+  
+    aug = A.Compose([
+        A.augmentations.transforms.PixelDropout(p=0.3),
+        A.VerticalFlip(p=0.5),
+    ])
+    val_aug = A.Compose([
+        A.VerticalFlip(p=0.5,always_apply=False)
+    ])
     ```
-    - model에 loss 추가
     ```
-   mmsegmentation/core/models/detector/one_stage.py (line 58~59, 72~73, 101~106)
-   mmsegmentation/core/models/detector/detector.py (line 97 ~ 105)
+    ./results/train/20221114_101319/model.pt 모델 학습 시 
+  
+    aug = A.Compose([
+        A.augmentations.transforms.Downscale(scale_min=0.15, scale_max=0.15,p=0.3),
+        A.augmentations.transforms.PixelDropout(p=0.3),
+        A.VerticalFlip(p=0.5),
+    ])
+    val_aug = A.Compose([
+        A.VerticalFlip(p=0.5,always_apply=False)
+    ])
     ```
-- **최종 제출 파일 : submitted.zip**
-- **학습된 가중치 파일 : training_results/submitted_model/iter_10000.pth**
+    ```
+    ./results/train/20221114_142823/model.pt 모델 학습 시 
+  
+    aug = A.Compose([
+        A.RandomContrast(p=0.3),
+        A.augmentations.transforms.Downscale(scale_min=0.15, scale_max=0.15,p=0.3),
+        A.augmentations.transforms.PixelDropout(p=0.3),
+        A.VerticalFlip(p=0.5),
+    ])
+    val_aug = A.Compose([
+        A.VerticalFlip(p=0.5,always_apply=False)
+    ])
+    ```
+  
+- **최종 제출 파일 : final_pred_mask.zip**
+- **학습된 가중치 파일 : 핵심파일 설명부분에 기재된 세개의 파라미터와 동일**
 
 ## 주요 설치 library
 - torchmetrics==0.10.2
@@ -48,59 +79,31 @@
 
   - 소스 코드 및 conda 환경 설치
     ```
-    unzip military_code.zip -d military_code
-    cd ./military_code/detector
+    unzip mmc_lab.zip -d mmc_lab_code
+    cd ./mmc_lab_code
 
     conda env create -n aiconnect
     conda activate aiconnect
     pip install -r requirements.txt
-    '''
+    ```
+    
 # 학습 실행 방법
 
   - 학습 데이터 경로 설정
-    - `./configs/training/location/my_dataset.yaml` 내의 경로명을 실제 학습 환경에 맞게 수정
-      ```
-      data_root_dir: /home/user/detection/my_dataset/  # 학습 데이터 절대경로명
-      out_root_dir: /home/user/detection/experiments/  # 학습 결과물 절대경로명
-      tb_dir: /home/user/detection/tb_logs/  # 학습 로그 절대경로명
-      ```
+    - 위의 실행 환경 설정을 하면 따로 학습 데이터 경로 설정 필요 없음
 
   - 학습 스크립트 실행
     ```
-    ./train.sh
+    python train.py
     ```
-    
-  - 학습 스크립트 내용
-    ```
-    #!/bin/bash
 
-    export TORCH_HOME=$(pwd) && export PYTHONPATH=$(pwd)
-
-    # 첫번째 Model 설정 기반 학습: last_v7__0daee5c4615df5fc17fb1a2f6733dfc1.ckpt, last_v10__dfcb68d46a9604de3147f9ead394f179.ckpt 획득
-    python bin/train.py -cn big-lama-aigp-1 location=my_dataset data.batch_size=5
-
-    # 두번째 Model 설정 기반 학습: last_v11__cdb2dc80b605a5e59d234f2721ff80ea.ckpt 획득
-    python bin/train.py -cn big-lama-aigp-2 location=my_dataset data.batch_size=5
-    ```
 
 # 테스트 실행 방법
 
   - 테스트 스크립트 실행
     ```
-    ./inference.sh
-    ```
-
-  - 테스트 스크립트 내용
-    ```
-    #!/bin/bash
-
-    export TORCH_HOME=$(pwd) && export PYTHONPATH=$(pwd)
-
-    install -d ./final_result/output_aipg
-
-    python bin/predict.py 
-
-
+    python predict.py
+    
     # 상기의 3가지 추론 결과를 Pixel-wise Averaging 처리하여 최종 detection 결과 생성
-    python ensemble_avg.py
+    python predict_en.py
     ```
